@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Szachy</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Szachy</h1>
+
+        <div id="statusBar" class="status-bar">
+            <div id="playerDot" class="player-dot white"></div>
+            <span id="status">Ruch: Białe</span>
+        </div>
+
+        <div class="board-wrapper">
+            <div id="board" class="board"></div>
+        </div>
+
+        <div class="controls">
+            <button onclick="resetGame()">Nowa gra</button>
+        </div>
+    </div>
+
+    <div id="promotionModal" class="modal-overlay">
+        <div class="promotion-modal">
+            <h3>Wybierz figurę</h3>
+            <div id="promotionPieces" class="promotion-pieces"></div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

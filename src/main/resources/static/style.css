@@ -1,0 +1,321 @@
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    color: #fff;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    padding: 20px;
+}
+
+h1 {
+    font-size: 1.8rem;
+    font-weight: 300;
+    letter-spacing: 6px;
+    text-transform: uppercase;
+    color: #e0c9a6;
+}
+
+/* ── Status bar ── */
+.status-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 30px;
+    padding: 9px 22px;
+    backdrop-filter: blur(10px);
+    transition: background 0.3s, border-color 0.3s;
+}
+
+.status-bar.check {
+    background: rgba(211, 47, 47, 0.25);
+    border-color: rgba(211, 47, 47, 0.5);
+}
+
+.status-bar.checkmate {
+    background: rgba(123, 31, 162, 0.25);
+    border-color: rgba(123, 31, 162, 0.5);
+}
+
+.status-bar.stalemate {
+    background: rgba(80, 80, 80, 0.25);
+    border-color: rgba(150, 150, 150, 0.4);
+}
+
+.player-dot {
+    width: 13px;
+    height: 13px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    transition: background 0.3s;
+}
+
+.player-dot.white {
+    background: #fff;
+    box-shadow: 0 0 6px rgba(255, 255, 255, 0.7);
+}
+
+.player-dot.black {
+    background: #1a1a1a;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+
+#status {
+    font-size: 0.95rem;
+    letter-spacing: 0.5px;
+    color: #e8e0d0;
+}
+
+/* ── Board ── */
+.board-wrapper {
+    position: relative;
+}
+
+.board {
+    display: grid;
+    grid-template-columns: repeat(8, 70px);
+    grid-template-rows: repeat(8, 70px);
+    border: 6px solid #5c3a1e;
+    box-shadow:
+        0 0 0 1px #7a4f2e,
+        0 0 0 7px #3d2010,
+        0 24px 64px rgba(0, 0, 0, 0.6);
+}
+
+/* ── Squares ── */
+.square {
+    width: 70px;
+    height: 70px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+}
+
+.square.light { background-color: #f0d9b5; }
+.square.dark  { background-color: #b58863; }
+
+/* Last move */
+.square.last-move.light { background-color: #cdd16f; }
+.square.last-move.dark  { background-color: #aaa23a; }
+
+/* Selected */
+.square.selected.light { background-color: #829769; }
+.square.selected.dark  { background-color: #646f40; }
+
+/* King in check — radial red glow */
+.square.in-check {
+    background: radial-gradient(
+        circle,
+        rgba(220, 0, 0, 0.85) 0%,
+        rgba(220, 0, 0, 0.4)  45%,
+        transparent 70%
+    ) !important;
+}
+
+/* Valid capture ring via background-image (no pseudo-elements, won't affect Selenium getText) */
+.square.valid-capture {
+    background-image: radial-gradient(transparent 52%, rgba(0, 0, 0, 0.17) 52%);
+}
+
+/* Coordinate labels via CSS pseudo-elements (invisible to Selenium getText) */
+.square[data-rank]::before {
+    content: attr(data-rank);
+    position: absolute;
+    top: 3px;
+    left: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    pointer-events: none;
+    z-index: 3;
+    line-height: 1;
+}
+
+.square[data-file]::after {
+    content: attr(data-file);
+    position: absolute;
+    bottom: 3px;
+    right: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    pointer-events: none;
+    z-index: 3;
+    line-height: 1;
+}
+
+.square.light[data-rank]::before,
+.square.light[data-file]::after { color: #b58863; }
+
+.square.dark[data-rank]::before,
+.square.dark[data-file]::after  { color: #f0d9b5; }
+
+/* ── Pieces ── */
+.piece {
+    font-size: 52px;
+    line-height: 1;
+    z-index: 2;
+    pointer-events: none;
+    transition: transform 0.08s ease;
+}
+
+.piece.piece-white {
+    color: #fff;
+    filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.95));
+}
+
+.piece.piece-black {
+    color: #1a1a1a;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4));
+}
+
+.square:hover .piece {
+    transform: scale(1.1) translateY(-2px);
+}
+
+/* Valid move dot (child element, also not text so Selenium getText ignores it) */
+.move-dot {
+    position: absolute;
+    width: 26px;
+    height: 26px;
+    background: rgba(0, 0, 0, 0.18);
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 1;
+}
+
+/* ── Controls ── */
+.controls {
+    display: flex;
+    gap: 12px;
+}
+
+button {
+    padding: 10px 28px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    background: rgba(255, 255, 255, 0.08);
+    color: #e0c9a6;
+    border: 1px solid rgba(224, 201, 166, 0.25);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s, transform 0.15s;
+    backdrop-filter: blur(8px);
+}
+
+button:hover {
+    background: rgba(255, 255, 255, 0.16);
+    border-color: rgba(224, 201, 166, 0.5);
+    transform: translateY(-1px);
+}
+
+button:active {
+    transform: translateY(0);
+}
+
+/* ── Promotion Modal ── */
+.modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.72);
+    z-index: 200;
+    justify-content: center;
+    align-items: center;
+    backdrop-filter: blur(5px);
+}
+
+.modal-overlay.active {
+    display: flex;
+}
+
+.promotion-modal {
+    background: #1b2336;
+    border: 1px solid rgba(255, 255, 255, 0.13);
+    border-radius: 16px;
+    padding: 28px 32px;
+    text-align: center;
+    box-shadow: 0 30px 90px rgba(0, 0, 0, 0.7);
+    animation: popIn 0.18s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes popIn {
+    from { transform: scale(0.75); opacity: 0; }
+    to   { transform: scale(1);    opacity: 1; }
+}
+
+.promotion-modal h3 {
+    margin-bottom: 20px;
+    font-size: 1rem;
+    font-weight: 400;
+    color: #aaa;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+
+.promotion-pieces {
+    display: flex;
+    gap: 10px;
+}
+
+.promotion-piece {
+    width: 88px;
+    height: 92px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, transform 0.15s;
+}
+
+.promotion-piece:hover {
+    background: rgba(255, 255, 255, 0.14);
+    border-color: rgba(224, 201, 166, 0.5);
+    transform: translateY(-4px);
+}
+
+.p-symbol {
+    font-size: 50px;
+    line-height: 1;
+    display: block;
+}
+
+.p-symbol.p-white {
+    color: #fff;
+    filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.95));
+}
+
+.p-symbol.p-black {
+    color: #1a1a1a;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4));
+}
+
+.p-name {
+    font-size: 11px;
+    color: #777;
+    margin-top: 7px;
+    display: block;
+    letter-spacing: 0.3px;
+}
