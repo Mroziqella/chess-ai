@@ -29,11 +29,15 @@ import java.util.stream.Stream;
 @Service
 public class GameService {
 
+    public static final String COMPUTER_PLAYER_NAME = "Komputer";
+
     private final Map<String, Game> games = new ConcurrentHashMap<>();
     private final ChessRules chessRules;
+    private final ComputerPlayerService computerPlayerService;
 
-    public GameService(ChessRules chessRules) {
+    public GameService(ChessRules chessRules, ComputerPlayerService computerPlayerService) {
         this.chessRules = chessRules;
+        this.computerPlayerService = computerPlayerService;
     }
 
     /**
@@ -77,16 +81,21 @@ public class GameService {
             throw new IllegalMoveException("Invalid move: " + request.from() + " -> " + request.to());
         }
 
-        boolean wasEnPassant = chessRules.isEnPassantCapture(from, to, game.board);
-        game.board.movePiece(from, to);
+        executeMoveOnBoard(game, from, to, request.promotion());
 
-        if (wasEnPassant) {
-            removeEnPassantCapturedPawn(to, game.currentPlayer, game.board);
+        // Auto-play computer move if it's a computer game and not game over
+        if (game.computerColor != null
+                && game.currentPlayer == game.computerColor
+                && !isGameOver(game)) {
+            String bestMove = computerPlayerService.findBestMove(game.board, game.currentPlayer);
+            if (bestMove != null) {
+                String[] parts = bestMove.split("-");
+                executeMoveOnBoard(game,
+                        Position.fromAlgebraic(parts[0]),
+                        Position.fromAlgebraic(parts[1]),
+                        "QUEEN");
+            }
         }
-
-        updateEnPassantTarget(from, to, game.board);
-        handlePromotion(to, game.board, request.promotion());
-        game.currentPlayer = game.currentPlayer.opponent();
 
         return buildGameState(game, resolvePlayerColor(game, username));
     }
@@ -98,6 +107,7 @@ public class GameService {
         Game game = getOrCreateGame(gameId);
         game.board = createInitialBoard();
         game.currentPlayer = Player.WHITE;
+        game.lastMove = null;
         return buildGameState(game, null);
     }
 
@@ -109,6 +119,18 @@ public class GameService {
         game.whitePlayer = whitePlayer;
         game.blackPlayer = blackPlayer;
         games.put(gameId, game);
+    }
+
+    /**
+     * Create a game against the computer (player is always white).
+     */
+    public GameState createComputerGame(String gameId, String playerUsername) {
+        Game game = new Game(createInitialBoard());
+        game.whitePlayer = playerUsername;
+        game.blackPlayer = COMPUTER_PLAYER_NAME;
+        game.computerColor = Player.BLACK;
+        games.put(gameId, game);
+        return buildGameState(game, Player.WHITE);
     }
 
     // ── Package-private test hook ─────────────────────────────────────────────
@@ -139,7 +161,8 @@ public class GameService {
                 legalMoves,
                 game.whitePlayer,
                 game.blackPlayer,
-                playerColor
+                playerColor,
+                game.lastMove
         );
     }
 
@@ -169,22 +192,68 @@ public class GameService {
                 .map(to -> from.toAlgebraic() + "-" + to.toAlgebraic());
     }
 
-    private void removeEnPassantCapturedPawn(Position landingSquare, Player capturingPlayer, Board board) {
-        int pawnAdvanceDirection = capturingPlayer == Player.WHITE ? 1 : -1;
-        board.removePiece(new Position(landingSquare.row() - pawnAdvanceDirection, landingSquare.col()));
+    private void executeMoveOnBoard(Game game, Position from, Position to, String promotion) {
+        boolean wasEnPassant = chessRules.isEnPassantCapture(from, to, game.board);
+        boolean wasCastling = game.board.getPiece(from)
+                .map(p -> chessRules.isCastlingMove(from, to, p)).orElse(false);
+
+        game.board.movePiece(from, to);
+
+        if (wasEnPassant) {
+            int dir = game.currentPlayer == Player.WHITE ? 1 : -1;
+            game.board.removePiece(new Position(to.row() - dir, to.col()));
+        }
+
+        if (wasCastling) {
+            int rookFromCol = to.col() > from.col() ? 7 : 0;
+            int rookToCol = to.col() > from.col() ? 5 : 3;
+            game.board.movePiece(
+                    new Position(from.row(), rookFromCol),
+                    new Position(from.row(), rookToCol));
+        }
+
+        updateCastlingRights(game.board, from, to, game.currentPlayer);
+
+        boolean wasPawnDoublePush = game.board.getPiece(to)
+                .map(p -> p.type() == PieceType.PAWN).orElse(false)
+                && Math.abs(to.row() - from.row()) == 2;
+        game.board.setEnPassantTarget(wasPawnDoublePush
+                ? new Position((from.row() + to.row()) / 2, from.col())
+                : null);
+
+        handlePromotion(to, game.board, promotion);
+        game.lastMove = from.toAlgebraic() + "-" + to.toAlgebraic();
+        game.currentPlayer = game.currentPlayer.opponent();
     }
 
-    private void updateEnPassantTarget(Position from, Position to, Board board) {
-        boolean wasPawnDoublePush = board.getPiece(to)
-                .map(p -> p.type() == PieceType.PAWN)
-                .orElse(false)
-                && Math.abs(to.row() - from.row()) == 2;
-
-        if (wasPawnDoublePush) {
-            board.setEnPassantTarget(new Position((from.row() + to.row()) / 2, from.col()));
-        } else {
-            board.setEnPassantTarget(null);
+    private void updateCastlingRights(Board board, Position from, Position to, Player player) {
+        int baseRow = player == Player.WHITE ? 0 : 7;
+        // King moved — revoke both rights
+        if (from.row() == baseRow && from.col() == 4) {
+            board.setCanCastleKingSide(player, false);
+            board.setCanCastleQueenSide(player, false);
         }
+        // Rook moved from starting square
+        if (from.row() == baseRow && from.col() == 0) {
+            board.setCanCastleQueenSide(player, false);
+        }
+        if (from.row() == baseRow && from.col() == 7) {
+            board.setCanCastleKingSide(player, false);
+        }
+        // Rook captured on opponent's starting square
+        int oppBaseRow = player == Player.WHITE ? 7 : 0;
+        Player opponent = player.opponent();
+        if (to.row() == oppBaseRow && to.col() == 0) {
+            board.setCanCastleQueenSide(opponent, false);
+        }
+        if (to.row() == oppBaseRow && to.col() == 7) {
+            board.setCanCastleKingSide(opponent, false);
+        }
+    }
+
+    private boolean isGameOver(Game game) {
+        return chessRules.isCheckmate(game.currentPlayer, game.board)
+                || chessRules.isStalemate(game.currentPlayer, game.board);
     }
 
     private void handlePromotion(Position square, Board board, String requestedPiece) {
@@ -239,6 +308,8 @@ public class GameService {
         Player currentPlayer = Player.WHITE;
         String whitePlayer;
         String blackPlayer;
+        String lastMove;
+        Player computerColor;
 
         Game(Board board) {
             this.board = board;

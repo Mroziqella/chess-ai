@@ -64,6 +64,15 @@ public class MatchmakingService {
         return MatchStatus.idle();
     }
 
+    public MatchStatus playComputer(String username) {
+        leaveGame(username);
+        String gameId = UUID.randomUUID().toString();
+        MatchedGame mg = new MatchedGame(gameId, username, GameService.COMPUTER_PLAYER_NAME);
+        playerGames.put(username, mg);
+        gameService.createComputerGame(gameId, username);
+        return MatchStatus.matched(gameId, Player.WHITE, GameService.COMPUTER_PLAYER_NAME);
+    }
+
     public void leaveGame(String username) {
         playerGames.remove(username);
         waitingQueue.remove(username);

@@ -27,6 +27,11 @@ public class MatchmakingController {
         return ResponseEntity.ok(matchmakingService.getStatus(principal.getName()));
     }
 
+    @PostMapping("/computer")
+    public ResponseEntity<MatchStatus> playComputer(Principal principal) {
+        return ResponseEntity.ok(matchmakingService.playComputer(principal.getName()));
+    }
+
     @PostMapping("/leave")
     public ResponseEntity<Void> leave(Principal principal) {
         matchmakingService.leaveGame(principal.getName());

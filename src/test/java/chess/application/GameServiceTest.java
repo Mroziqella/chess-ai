@@ -7,6 +7,7 @@ import chess.domain.model.Player;
 import chess.domain.model.Position;
 import chess.domain.piece.*;
 import chess.domain.service.ChessRules;
+import chess.application.ComputerPlayerService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -18,7 +19,8 @@ class GameServiceTest {
 
     @BeforeEach
     void setUp() {
-        gameService = new GameService(new ChessRules());
+        ChessRules chessRules = new ChessRules();
+        gameService = new GameService(chessRules, new ComputerPlayerService(chessRules));
     }
 
     @Test
@@ -213,5 +215,134 @@ class GameServiceTest {
 
         GameState state = gameService.getGameState("ep3");
         assertThat(state.legalMoves()).anyMatch(m -> m.equals("e5-d6"));
+    }
+
+    // ── Castling tests ─────────────────────────────────────────────────────
+
+    @Test
+    void makeMove_whiteKingSideCastling() {
+        Board board = new Board();
+        board.setPiece(new Position(0, 4), new King(Player.WHITE));
+        board.setPiece(new Position(0, 7), new Rook(Player.WHITE));
+        board.setPiece(new Position(7, 4), new King(Player.BLACK));
+        gameService.setupPositionForTesting("castle-ks", board, Player.WHITE);
+
+        GameState state = gameService.makeMove("castle-ks", new MoveRequest("e1", "g1"));
+
+        // King at g1 (backend row 0, col 6 -> display row 7, col 6)
+        assertThat(state.board().squares().get(7).get(6)).isEqualTo("♔");
+        // Rook at f1 (backend row 0, col 5 -> display row 7, col 5)
+        assertThat(state.board().squares().get(7).get(5)).isEqualTo("♖");
+        // Original squares empty
+        assertThat(state.board().squares().get(7).get(4)).isEmpty();
+        assertThat(state.board().squares().get(7).get(7)).isEmpty();
+    }
+
+    @Test
+    void makeMove_whiteQueenSideCastling() {
+        Board board = new Board();
+        board.setPiece(new Position(0, 4), new King(Player.WHITE));
+        board.setPiece(new Position(0, 0), new Rook(Player.WHITE));
+        board.setPiece(new Position(7, 4), new King(Player.BLACK));
+        gameService.setupPositionForTesting("castle-qs", board, Player.WHITE);
+
+        GameState state = gameService.makeMove("castle-qs", new MoveRequest("e1", "c1"));
+
+        // King at c1 (display row 7, col 2)
+        assertThat(state.board().squares().get(7).get(2)).isEqualTo("♔");
+        // Rook at d1 (display row 7, col 3)
+        assertThat(state.board().squares().get(7).get(3)).isEqualTo("♖");
+        // Original squares empty
+        assertThat(state.board().squares().get(7).get(4)).isEmpty();
+        assertThat(state.board().squares().get(7).get(0)).isEmpty();
+    }
+
+    @Test
+    void makeMove_blackKingSideCastling() {
+        Board board = new Board();
+        board.setPiece(new Position(7, 4), new King(Player.BLACK));
+        board.setPiece(new Position(7, 7), new Rook(Player.BLACK));
+        board.setPiece(new Position(0, 4), new King(Player.WHITE));
+        gameService.setupPositionForTesting("castle-bks", board, Player.BLACK);
+
+        GameState state = gameService.makeMove("castle-bks", new MoveRequest("e8", "g8"));
+
+        // King at g8 (display row 0, col 6)
+        assertThat(state.board().squares().get(0).get(6)).isEqualTo("♚");
+        // Rook at f8 (display row 0, col 5)
+        assertThat(state.board().squares().get(0).get(5)).isEqualTo("♜");
+    }
+
+    @Test
+    void makeMove_castlingNotAllowedWhenKingInCheck() {
+        Board board = new Board();
+        board.setPiece(new Position(0, 4), new King(Player.WHITE));
+        board.setPiece(new Position(0, 7), new Rook(Player.WHITE));
+        board.setPiece(new Position(7, 4), new King(Player.BLACK));
+        board.setPiece(new Position(7, 3), new Rook(Player.BLACK)); // d8 rook attacks d-file
+        // Put black rook on e-file to give check
+        board.setPiece(new Position(5, 4), new Rook(Player.BLACK)); // e6 attacks e1
+        gameService.setupPositionForTesting("castle-check", board, Player.WHITE);
+
+        GameState state = gameService.getGameState("castle-check");
+        assertThat(state.legalMoves()).noneMatch(m -> m.equals("e1-g1"));
+    }
+
+    @Test
+    void makeMove_castlingNotAllowedWhenPassingThroughAttack() {
+        Board board = new Board();
+        board.setPiece(new Position(0, 4), new King(Player.WHITE));
+        board.setPiece(new Position(0, 7), new Rook(Player.WHITE));
+        board.setPiece(new Position(7, 4), new King(Player.BLACK));
+        // Black rook on f8 attacks f1 (the intermediate square)
+        board.setPiece(new Position(7, 5), new Rook(Player.BLACK));
+        gameService.setupPositionForTesting("castle-through", board, Player.WHITE);
+
+        GameState state = gameService.getGameState("castle-through");
+        assertThat(state.legalMoves()).noneMatch(m -> m.equals("e1-g1"));
+    }
+
+    @Test
+    void makeMove_castlingNotAllowedAfterKingMoves() {
+        Board board = new Board();
+        board.setPiece(new Position(0, 4), new King(Player.WHITE));
+        board.setPiece(new Position(0, 7), new Rook(Player.WHITE));
+        board.setPiece(new Position(7, 4), new King(Player.BLACK));
+        gameService.setupPositionForTesting("castle-moved", board, Player.WHITE);
+
+        // Move king and move back
+        gameService.makeMove("castle-moved", new MoveRequest("e1", "d1"));
+        gameService.makeMove("castle-moved", new MoveRequest("e8", "d8"));
+        gameService.makeMove("castle-moved", new MoveRequest("d1", "e1"));
+        gameService.makeMove("castle-moved", new MoveRequest("d8", "e8"));
+
+        GameState state = gameService.getGameState("castle-moved");
+        assertThat(state.legalMoves()).noneMatch(m -> m.equals("e1-g1"));
+    }
+
+    @Test
+    void makeMove_castlingNotAllowedWhenPathBlocked() {
+        Board board = new Board();
+        board.setPiece(new Position(0, 4), new King(Player.WHITE));
+        board.setPiece(new Position(0, 7), new Rook(Player.WHITE));
+        board.setPiece(new Position(0, 5), new Bishop(Player.WHITE)); // f1 blocks path
+        board.setPiece(new Position(7, 4), new King(Player.BLACK));
+        gameService.setupPositionForTesting("castle-blocked", board, Player.WHITE);
+
+        GameState state = gameService.getGameState("castle-blocked");
+        assertThat(state.legalMoves()).noneMatch(m -> m.equals("e1-g1"));
+    }
+
+    @Test
+    void makeMove_castlingAvailableInLegalMoves() {
+        Board board = new Board();
+        board.setPiece(new Position(0, 4), new King(Player.WHITE));
+        board.setPiece(new Position(0, 7), new Rook(Player.WHITE));
+        board.setPiece(new Position(0, 0), new Rook(Player.WHITE));
+        board.setPiece(new Position(7, 4), new King(Player.BLACK));
+        gameService.setupPositionForTesting("castle-legal", board, Player.WHITE);
+
+        GameState state = gameService.getGameState("castle-legal");
+        assertThat(state.legalMoves()).contains("e1-g1", "e1-c1");
     }
 }

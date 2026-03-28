@@ -6,6 +6,7 @@ let lastMove = null;
 let currentGameId = null;
 let playerColor = null;
 let opponentName = null;
+let isComputerGame = false;
 let pollInterval = null;
 let matchPollInterval = null;
 
@@ -45,9 +46,12 @@ function handleMatchStatus(status) {
         currentGameId = status.gameId;
         playerColor = status.playerColor;
         opponentName = status.opponent;
+        isComputerGame = (status.opponent === 'Komputer');
         showGameView(true);
         loadGame();
-        startGamePolling();
+        if (!isComputerGame) {
+            startGamePolling();
+        }
     } else if (status.state === 'WAITING') {
         showWaiting();
         startMatchPolling();
@@ -136,6 +140,16 @@ async function cancelSearch() {
     showLobby();
 }
 
+async function playComputer() {
+    try {
+        const response = await fetch('/api/matchmaking/computer', { method: 'POST' });
+        const status = await response.json();
+        handleMatchStatus(status);
+    } catch (error) {
+        console.error('Error starting computer game:', error);
+    }
+}
+
 async function leaveAndFindNew() {
     stopGamePolling();
     try {
@@ -150,6 +164,7 @@ async function leaveAndFindNew() {
     selectedSquare = null;
     validMoves = [];
     lastMove = null;
+    isComputerGame = false;
     showLobby();
 }
 
@@ -179,6 +194,12 @@ async function loadGame() {
     try {
         const response = await fetch('/api/game?gameId=' + getGameId());
         gameState = await response.json();
+
+        if (gameState.lastMove) {
+            const parts = gameState.lastMove.split('-');
+            lastMove = { from: fromAlgebraic(parts[0]), to: fromAlgebraic(parts[1]) };
+        }
+
         renderBoard();
         updateStatus();
 
@@ -398,8 +419,16 @@ async function makeMove(from, to, promotion = null) {
             return;
         }
 
-        lastMove = { from: fromAlgebraic(from), to: fromAlgebraic(to) };
         gameState = await response.json();
+
+        // Use server-side lastMove (shows computer's response in computer games)
+        if (gameState.lastMove) {
+            const parts = gameState.lastMove.split('-');
+            lastMove = { from: fromAlgebraic(parts[0]), to: fromAlgebraic(parts[1]) };
+        } else {
+            lastMove = { from: fromAlgebraic(from), to: fromAlgebraic(to) };
+        }
+
         renderBoard();
         updateStatus();
 
@@ -408,7 +437,7 @@ async function makeMove(from, to, promotion = null) {
             if (gameState.status === 'CHECKMATE' || gameState.status === 'STALEMATE') {
                 stopGamePolling();
                 document.getElementById('newGameBtn').classList.remove('hidden');
-            } else {
+            } else if (!isComputerGame) {
                 startGamePolling();
             }
         }

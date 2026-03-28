@@ -15,6 +15,10 @@ public class Board {
     private final int cols;
     private final Map<Position, Square> squares;
     private Position enPassantTarget; // square a pawn can capture en passant; null if not available
+    private boolean whiteKingSideCastle = true;
+    private boolean whiteQueenSideCastle = true;
+    private boolean blackKingSideCastle = true;
+    private boolean blackQueenSideCastle = true;
 
     public Board(int rows, int cols) {
         if (rows <= 0 || cols <= 0) {
@@ -144,6 +148,24 @@ public class Board {
 
     public void setEnPassantTarget(Position enPassantTarget) {
         this.enPassantTarget = enPassantTarget;
+    }
+
+    public boolean canCastleKingSide(Player player) {
+        return player == Player.WHITE ? whiteKingSideCastle : blackKingSideCastle;
+    }
+
+    public boolean canCastleQueenSide(Player player) {
+        return player == Player.WHITE ? whiteQueenSideCastle : blackQueenSideCastle;
+    }
+
+    public void setCanCastleKingSide(Player player, boolean can) {
+        if (player == Player.WHITE) whiteKingSideCastle = can;
+        else blackKingSideCastle = can;
+    }
+
+    public void setCanCastleQueenSide(Player player, boolean can) {
+        if (player == Player.WHITE) whiteQueenSideCastle = can;
+        else blackQueenSideCastle = can;
     }
 
     @Override

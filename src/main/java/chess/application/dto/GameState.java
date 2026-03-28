@@ -19,7 +19,8 @@ public record GameState(
         List<String> legalMoves,
         String whitePlayer,
         String blackPlayer,
-        Player playerColor
+        Player playerColor,
+        String lastMove
 ) {
     /**
      * 2-D snapshot of the board as Unicode piece symbols, indexed

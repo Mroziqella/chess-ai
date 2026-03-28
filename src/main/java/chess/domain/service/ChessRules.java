@@ -30,8 +30,26 @@ public class ChessRules {
         return board.getPiece(from)
                 .filter(piece -> piece.color() == player)
                 .filter(piece -> piece.canMoveTo(from, to, board))
-                .map(piece -> !wouldLeaveOwnKingInCheck(from, to, player, board))
+                .map(piece -> {
+                    if (isCastlingMove(from, to, piece)) {
+                        // Cannot castle while in check
+                        if (isInCheck(player, board)) return false;
+                        // Intermediate square must not be attacked
+                        Position intermediate = new Position(from.row(), (from.col() + to.col()) / 2);
+                        if (isSquareAttacked(intermediate, player.opponent(), board)) return false;
+                    }
+                    return !wouldLeaveOwnKingInCheck(from, to, player, board);
+                })
                 .orElse(false);
+    }
+
+    /**
+     * Return true if this move is a castling move (king moves 2 squares horizontally).
+     */
+    public boolean isCastlingMove(Position from, Position to, Piece piece) {
+        return piece.type() == PieceType.KING
+                && from.row() == to.row()
+                && Math.abs(to.col() - from.col()) == 2;
     }
 
     /**
@@ -39,7 +57,7 @@ public class ChessRules {
      */
     public boolean isInCheck(Player player, Board board) {
         return board.getKingPosition(player)
-                .map(kingPosition -> isKingUnderAttack(kingPosition, player.opponent(), board))
+                .map(kingPos -> isSquareAttacked(kingPos, player.opponent(), board))
                 .orElse(false);
     }
 
@@ -73,9 +91,9 @@ public class ChessRules {
 
     // ── Private helpers ───────────────────────────────────────────────────────
 
-    private boolean isKingUnderAttack(Position kingPosition, Player attacker, Board board) {
+    private boolean isSquareAttacked(Position square, Player attacker, Board board) {
         return board.getPiecesOf(attacker).entrySet().stream()
-                .anyMatch(e -> e.getValue().canMoveTo(e.getKey(), kingPosition, board));
+                .anyMatch(e -> e.getValue().canMoveTo(e.getKey(), square, board));
     }
 
     private boolean hasNoLegalMove(Player player, Board board) {
@@ -96,6 +114,13 @@ public class ChessRules {
             removeCapturedEnPassantPawn(to, player, simulated);
         }
 
+        // If castling, also move the rook in simulation
+        if (board.getPiece(from).map(p -> isCastlingMove(from, to, p)).orElse(false)) {
+            int rookFromCol = to.col() > from.col() ? 7 : 0;
+            int rookToCol = to.col() > from.col() ? 5 : 3;
+            simulated.movePiece(new Position(from.row(), rookFromCol), new Position(from.row(), rookToCol));
+        }
+
         return isInCheck(player, simulated);
     }
 
@@ -108,6 +133,10 @@ public class ChessRules {
         Board copy = new Board(original.rows(), original.cols());
         original.allPieces().forEach((pos, piece) -> copy.setPiece(pos, createPieceCopy(piece)));
         copy.setEnPassantTarget(original.getEnPassantTarget());
+        copy.setCanCastleKingSide(Player.WHITE, original.canCastleKingSide(Player.WHITE));
+        copy.setCanCastleQueenSide(Player.WHITE, original.canCastleQueenSide(Player.WHITE));
+        copy.setCanCastleKingSide(Player.BLACK, original.canCastleKingSide(Player.BLACK));
+        copy.setCanCastleQueenSide(Player.BLACK, original.canCastleQueenSide(Player.BLACK));
         return copy;
     }
 
