@@ -1,12 +1,16 @@
 package chess.application.dto;
 
 import chess.domain.model.Board;
+import chess.domain.model.Piece;
 import chess.domain.model.Player;
+import chess.domain.model.Position;
 
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 /**
- * DTO for representing the current game state.
+ * DTO representing the full state of a game at a single point in time.
  */
 public record GameState(
         BoardDTO board,
@@ -14,17 +18,21 @@ public record GameState(
         GameStatus status,
         List<String> legalMoves
 ) {
+    /**
+     * 2-D snapshot of the board as Unicode piece symbols, indexed
+     * [displayRow][col] where display row 0 is rank 8 (black's back rank).
+     */
     public record BoardDTO(List<List<String>> squares) {
+
         public static BoardDTO fromBoard(Board board) {
-            List<List<String>> squares = new java.util.ArrayList<>();
-            for (int row = board.rows() - 1; row >= 0; row--) {
-                List<String> rowSquares = new java.util.ArrayList<>();
-                for (int col = 0; col < board.cols(); col++) {
-                    var piece = board.getPiece(new chess.domain.model.Position(row, col));
-                    rowSquares.add(piece.map(p -> p.getSymbol()).orElse(""));
-                }
-                squares.add(rowSquares);
-            }
+            List<List<String>> squares = IntStream.range(0, board.rows())
+                    .map(i -> board.rows() - 1 - i) // display row 0 = highest backend row (rank 8)
+                    .mapToObj(row -> IntStream.range(0, board.cols())
+                            .mapToObj(col -> board.getPiece(new Position(row, col))
+                                    .map(Piece::getSymbol)
+                                    .orElse(""))
+                            .collect(Collectors.toList()))
+                    .collect(Collectors.toList());
             return new BoardDTO(squares);
         }
     }

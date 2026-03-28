@@ -1,22 +1,20 @@
 package chess.domain.piece;
 
 import chess.domain.model.Board;
-import chess.domain.model.Piece;
 import chess.domain.model.PieceType;
 import chess.domain.model.Player;
 import chess.domain.model.Position;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Bishop piece - moves any number of squares diagonally.
+ * Bishop — slides diagonally any number of squares.
  */
-public class Bishop extends Piece {
+public class Bishop extends SlidingPiece {
 
     private static final int[][] DIRECTIONS = {
         {-1, -1}, {-1, 1},
-        {1, -1},  {1, 1}
+        { 1, -1}, { 1, 1}
     };
 
     public Bishop(Player color) {
@@ -30,32 +28,7 @@ public class Bishop extends Piece {
 
     @Override
     public List<Position> getLegalMoves(Position from, Board board) {
-        List<Position> moves = new ArrayList<>();
-
-        for (int[] dir : DIRECTIONS) {
-            moves.addAll(slideInDirection(from, dir[0], dir[1], board));
-        }
-
-        return moves;
-    }
-
-    private List<Position> slideInDirection(Position from, int dRow, int dCol, Board board) {
-        List<Position> moves = new ArrayList<>();
-        Position current = from.move(dRow, dCol);
-
-        while (board.isValidPosition(current)) {
-            if (board.isEmpty(current)) {
-                moves.add(current);
-            } else if (board.hasEnemyPieceOf(current, color())) {
-                moves.add(current);
-                break;
-            } else {
-                break;
-            }
-            current = current.move(dRow, dCol);
-        }
-
-        return moves;
+        return slidingMoves(from, board, DIRECTIONS);
     }
 
     @Override

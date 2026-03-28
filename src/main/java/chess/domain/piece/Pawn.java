@@ -8,20 +8,22 @@ import chess.domain.model.Position;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
- * Pawn piece - moves forward (direction depends on color), captures diagonally.
- * Special rules: initial double move, en passant, promotion not implemented yet.
+ * Pawn — advances forward, captures diagonally, and has three special moves:
+ * initial double push, en passant capture, and promotion on the last rank.
  */
 public class Pawn extends Piece {
 
-    private final int direction; // 1 for white (moves up), -1 for black (moves down)
-    private final int startRow; // Starting row for this pawn
+    private final int advanceDirection; // +1 for white (up the board), -1 for black (down)
+    private final int homeRow;          // row from which the double push is allowed
 
     public Pawn(Player color) {
         super(color);
-        this.direction = (color == Player.WHITE) ? 1 : -1;
-        this.startRow = (color == Player.WHITE) ? 1 : 6;
+        this.advanceDirection = (color == Player.WHITE) ? 1 : -1;
+        this.homeRow = (color == Player.WHITE) ? 1 : 6;
     }
 
     @Override
@@ -32,42 +34,53 @@ public class Pawn extends Piece {
     @Override
     public List<Position> getLegalMoves(Position from, Board board) {
         List<Position> moves = new ArrayList<>();
+        moves.addAll(forwardMoves(from, board));
+        moves.addAll(diagonalCaptures(from, board));
+        enPassantCapture(from, board).ifPresent(moves::add);
+        return moves;
+    }
 
-        // Single forward move
-        Position forward = from.move(direction, 0);
-        if (board.isValidPosition(forward) && board.isEmpty(forward)) {
-            moves.add(forward);
+    private List<Position> forwardMoves(Position from, Board board) {
+        List<Position> moves = new ArrayList<>();
+        Position oneForward = from.move(advanceDirection, 0);
 
-            // Double forward move from starting position
-            if (from.row() == startRow) {
-                Position doubleForward = from.move(direction * 2, 0);
-                if (board.isValidPosition(doubleForward) && board.isEmpty(doubleForward)) {
-                    moves.add(doubleForward);
-                }
-            }
+        if (!board.isValidPosition(oneForward) || !board.isEmpty(oneForward)) {
+            return moves; // path blocked
         }
+        moves.add(oneForward);
 
-        // Diagonal captures
-        Position captureLeft = from.move(direction, -1);
-        if (board.isValidPosition(captureLeft) && board.hasEnemyPieceOf(captureLeft, color())) {
-            moves.add(captureLeft);
-        }
-
-        Position captureRight = from.move(direction, 1);
-        if (board.isValidPosition(captureRight) && board.hasEnemyPieceOf(captureRight, color())) {
-            moves.add(captureRight);
-        }
-
-        // En passant captures
-        Position epTarget = board.getEnPassantTarget();
-        if (epTarget != null && epTarget.row() == from.row() + direction) {
-            int colDiff = epTarget.col() - from.col();
-            if (colDiff == 1 || colDiff == -1) {
-                moves.add(epTarget);
+        if (isOnHomeRow(from)) {
+            Position twoForward = from.move(advanceDirection * 2, 0);
+            if (board.isValidPosition(twoForward) && board.isEmpty(twoForward)) {
+                moves.add(twoForward);
             }
         }
 
         return moves;
+    }
+
+    private List<Position> diagonalCaptures(Position from, Board board) {
+        return List.of(
+                from.move(advanceDirection, -1),
+                from.move(advanceDirection, +1)
+        ).stream()
+                .filter(board::isValidPosition)
+                .filter(pos -> board.hasEnemyPieceOf(pos, color()))
+                .collect(Collectors.toList());
+    }
+
+    private Optional<Position> enPassantCapture(Position from, Board board) {
+        Position epTarget = board.getEnPassantTarget();
+        if (epTarget == null) return Optional.empty();
+
+        boolean isOneRowForward = epTarget.row() == from.row() + advanceDirection;
+        boolean isAdjacentFile   = Math.abs(epTarget.col() - from.col()) == 1;
+
+        return (isOneRowForward && isAdjacentFile) ? Optional.of(epTarget) : Optional.empty();
+    }
+
+    private boolean isOnHomeRow(Position pos) {
+        return pos.row() == homeRow;
     }
 
     @Override

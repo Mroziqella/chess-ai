@@ -2,166 +2,123 @@ package chess.domain.service;
 
 import chess.domain.model.Board;
 import chess.domain.model.Piece;
+import chess.domain.model.PieceType;
 import chess.domain.model.Player;
 import chess.domain.model.Position;
+import chess.domain.piece.Bishop;
+import chess.domain.piece.King;
+import chess.domain.piece.Knight;
+import chess.domain.piece.Pawn;
+import chess.domain.piece.Queen;
+import chess.domain.piece.Rook;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
-import java.util.Optional;
-
 /**
- * Service for chess game rules: move validation, check/mate detection.
+ * Domain service that encapsulates the rules of chess:
+ * move legality, check, checkmate, stalemate, and en passant.
  */
 @Service
 public class ChessRules {
 
     /**
-     * Check if a move is legal for the given player.
+     * Return true if the player is allowed to move the piece from 'from' to 'to'.
+     * A move is legal when: the piece belongs to the player, the piece can reach
+     * the target square by its movement rules, and the move does not leave the
+     * player's own king in check.
      */
     public boolean isLegalMove(Position from, Position to, Player player, Board board) {
-        Optional<Piece> piece = board.getPiece(from);
-
-        if (piece.isEmpty()) {
-            return false;
-        }
-
-        if (piece.get().color() != player) {
-            return false;
-        }
-
-        if (!piece.get().canMoveTo(from, to, board)) {
-            return false;
-        }
-
-        // Check if move would leave king in check
-        return !wouldBeInCheck(from, to, player, board);
+        return board.getPiece(from)
+                .filter(piece -> piece.color() == player)
+                .filter(piece -> piece.canMoveTo(from, to, board))
+                .map(piece -> !wouldLeaveOwnKingInCheck(from, to, player, board))
+                .orElse(false);
     }
 
     /**
-     * Check if the player's king is in check.
+     * Return true if the given player's king is currently under attack.
      */
     public boolean isInCheck(Player player, Board board) {
-        Optional<Position> kingPos = board.getKingPosition(player);
-        if (kingPos.isEmpty()) {
-            return false;
-        }
-
-        Position king = kingPos.get();
-        Player opponent = player.opponent();
-
-        // Check if any opponent piece can attack the king's position
-        for (Piece piece : board.getPiecesOf(opponent).values()) {
-            Position piecePos = findPiecePosition(piece, board);
-            if (piecePos != null && piece.canMoveTo(piecePos, king, board)) {
-                return true;
-            }
-        }
-
-        return false;
+        return board.getKingPosition(player)
+                .map(kingPosition -> isKingUnderAttack(kingPosition, player.opponent(), board))
+                .orElse(false);
     }
 
     /**
-     * Check if the player is in checkmate.
+     * Return true if the player is in checkmate: the king is in check
+     * and no legal move can escape it.
      */
     public boolean isCheckmate(Player player, Board board) {
-        if (!isInCheck(player, board)) {
-            return false;
-        }
-
-        // Check if any legal move exists
-        return !hasAnyLegalMove(player, board);
+        return isInCheck(player, board) && hasNoLegalMove(player, board);
     }
 
     /**
-     * Check if the game is in stalemate.
+     * Return true if the player is in stalemate: not in check,
+     * but every move would place the king in check.
      */
     public boolean isStalemate(Player player, Board board) {
-        if (isInCheck(player, board)) {
-            return false;
-        }
-
-        return !hasAnyLegalMove(player, board);
+        return !isInCheck(player, board) && hasNoLegalMove(player, board);
     }
 
     /**
-     * Check if moving from 'from' to 'to' would result in the player's king being in check.
+     * Return true if moving from 'from' to 'to' is an en passant capture.
+     * Used both in move validation and in executing the side-effect (removing
+     * the captured pawn from its actual square).
      */
-    private boolean wouldBeInCheck(Position from, Position to, Player player, Board board) {
-        Board tempBoard = copyBoard(board);
-        tempBoard.movePiece(from, to);
-
-        // For en passant: captured pawn is not at 'to' but one row behind it
+    public boolean isEnPassantCapture(Position from, Position to, Board board) {
         Position epTarget = board.getEnPassantTarget();
-        if (epTarget != null && epTarget.equals(to)) {
-            Optional<Piece> piece = board.getPiece(from);
-            if (piece.isPresent() && piece.get().type() == chess.domain.model.PieceType.PAWN) {
-                int direction = player == Player.WHITE ? 1 : -1;
-                tempBoard.removePiece(new Position(to.row() - direction, to.col()));
-            }
-        }
-
-        return isInCheck(player, tempBoard);
+        return epTarget != null
+                && epTarget.equals(to)
+                && board.getPiece(from).map(p -> p.type() == PieceType.PAWN).orElse(false);
     }
 
-    /**
-     * Check if player has any legal move.
-     */
-    private boolean hasAnyLegalMove(Player player, Board board) {
-        for (var entry : board.getPiecesOf(player).entrySet()) {
-            Position from = entry.getKey();
-            Piece piece = entry.getValue();
+    // ── Private helpers ───────────────────────────────────────────────────────
 
-            List<Position> moves = piece.getLegalMoves(from, board);
-            for (Position to : moves) {
-                if (isLegalMove(from, to, player, board)) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
+    private boolean isKingUnderAttack(Position kingPosition, Player attacker, Board board) {
+        return board.getPiecesOf(attacker).entrySet().stream()
+                .anyMatch(e -> e.getValue().canMoveTo(e.getKey(), kingPosition, board));
     }
 
-    /**
-     * Find the position of a piece on the board.
-     */
-    private Position findPiecePosition(Piece piece, Board board) {
-        for (var entry : board.getPiecesOf(piece.color()).entrySet()) {
-            if (entry.getValue() == piece) {
-                return entry.getKey();
-            }
-        }
-        return null;
+    private boolean hasNoLegalMove(Player player, Board board) {
+        return board.getPiecesOf(player).entrySet().stream()
+                .noneMatch(e -> pieceHasAnyLegalMove(e.getKey(), e.getValue(), player, board));
     }
 
-    /**
-     * Create a deep copy of the board.
-     */
-    private Board copyBoard(Board board) {
-        Board copy = new Board(board.rows(), board.cols());
+    private boolean pieceHasAnyLegalMove(Position from, Piece piece, Player player, Board board) {
+        return piece.getLegalMoves(from, board).stream()
+                .anyMatch(to -> isLegalMove(from, to, player, board));
+    }
 
-        for (int row = 0; row < board.rows(); row++) {
-            for (int col = 0; col < board.cols(); col++) {
-                Position pos = new Position(row, col);
-                board.getPiece(pos).ifPresent(piece -> {
-                    Piece copyPiece = createPieceCopy(piece);
-                    copy.setPiece(pos, copyPiece);
-                });
-            }
+    private boolean wouldLeaveOwnKingInCheck(Position from, Position to, Player player, Board board) {
+        Board simulated = copyBoard(board);
+        simulated.movePiece(from, to);
+
+        if (isEnPassantCapture(from, to, board)) {
+            removeCapturedEnPassantPawn(to, player, simulated);
         }
 
-        copy.setEnPassantTarget(board.getEnPassantTarget());
+        return isInCheck(player, simulated);
+    }
+
+    private void removeCapturedEnPassantPawn(Position landingSquare, Player capturingPlayer, Board board) {
+        int pawnAdvanceDirection = capturingPlayer == Player.WHITE ? 1 : -1;
+        board.removePiece(new Position(landingSquare.row() - pawnAdvanceDirection, landingSquare.col()));
+    }
+
+    private Board copyBoard(Board original) {
+        Board copy = new Board(original.rows(), original.cols());
+        original.allPieces().forEach((pos, piece) -> copy.setPiece(pos, createPieceCopy(piece)));
+        copy.setEnPassantTarget(original.getEnPassantTarget());
         return copy;
     }
 
     private Piece createPieceCopy(Piece piece) {
         return switch (piece.type()) {
-            case KING -> new chess.domain.piece.King(piece.color());
-            case QUEEN -> new chess.domain.piece.Queen(piece.color());
-            case ROOK -> new chess.domain.piece.Rook(piece.color());
-            case BISHOP -> new chess.domain.piece.Bishop(piece.color());
-            case KNIGHT -> new chess.domain.piece.Knight(piece.color());
-            case PAWN -> new chess.domain.piece.Pawn(piece.color());
+            case KING   -> new King(piece.color());
+            case QUEEN  -> new Queen(piece.color());
+            case ROOK   -> new Rook(piece.color());
+            case BISHOP -> new Bishop(piece.color());
+            case KNIGHT -> new Knight(piece.color());
+            case PAWN   -> new Pawn(piece.color());
         };
     }
 }

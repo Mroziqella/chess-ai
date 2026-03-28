@@ -6,19 +6,21 @@ import chess.domain.model.PieceType;
 import chess.domain.model.Player;
 import chess.domain.model.Position;
 
-import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
- * Knight piece - moves in an L-shape: two squares in one direction + one square perpendicular.
+ * Knight — jumps in an L-shape: two squares in one direction, one square perpendicular.
+ * The only piece that can leap over other pieces.
  */
 public class Knight extends Piece {
 
-    private static final int[][] MOVES = {
-        {-2, -1}, {-2, 1},
-        {-1, -2}, {-1, 2},
-        {1, -2},  {1, 2},
-        {2, -1},  {2, 1}
+    private static final int[][] JUMPS = {
+        {-2, -1}, {-2,  1},
+        {-1, -2}, {-1,  2},
+        { 1, -2}, { 1,  2},
+        { 2, -1}, { 2,  1}
     };
 
     public Knight(Player color) {
@@ -32,18 +34,11 @@ public class Knight extends Piece {
 
     @Override
     public List<Position> getLegalMoves(Position from, Board board) {
-        List<Position> moves = new ArrayList<>();
-
-        for (int[] move : MOVES) {
-            Position to = from.move(move[0], move[1]);
-            if (board.isValidPosition(to)) {
-                if (board.isEmpty(to) || board.hasEnemyPieceOf(to, color())) {
-                    moves.add(to);
-                }
-            }
-        }
-
-        return moves;
+        return Arrays.stream(JUMPS)
+                .map(jump -> from.move(jump[0], jump[1]))
+                .filter(board::isValidPosition)
+                .filter(to -> board.isEmpty(to) || board.hasEnemyPieceOf(to, color()))
+                .collect(Collectors.toList());
     }
 
     @Override

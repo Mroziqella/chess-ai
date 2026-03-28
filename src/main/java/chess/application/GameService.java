@@ -2,19 +2,29 @@ package chess.application;
 
 import chess.application.dto.GameState;
 import chess.application.dto.MoveRequest;
-import chess.domain.model.*;
-import chess.domain.piece.*;
+import chess.domain.model.Board;
+import chess.domain.model.Piece;
+import chess.domain.model.PieceType;
+import chess.domain.model.Player;
+import chess.domain.model.Position;
+import chess.domain.piece.Bishop;
+import chess.domain.piece.Knight;
+import chess.domain.piece.Pawn;
+import chess.domain.piece.Queen;
+import chess.domain.piece.Rook;
+import chess.domain.piece.King;
 import chess.domain.service.ChessRules;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
- * Service for managing the chess game state.
+ * Application service that manages active chess games.
+ * Each game is identified by a string ID and stored in memory.
  */
 @Service
 public class GameService {
@@ -27,205 +37,172 @@ public class GameService {
     }
 
     /**
-     * Get or create a game.
-     */
-    public Game getGame(String gameId) {
-        return games.computeIfAbsent(gameId, k -> {
-            Game g = new Game();
-            g.board = createInitialBoard();
-            return g;
-        });
-    }
-
-    /**
-     * Get current game state.
+     * Return the current state of the game, creating it if it does not yet exist.
      */
     public GameState getGameState(String gameId) {
-        Game game = getGame(gameId);
-        Board board = game.board;
-        Player currentPlayer = game.currentPlayer;
-
-        GameState.GameStatus status = determineGameStatus(currentPlayer, board);
-        List<String> legalMoves = getLegalMovesForCurrentPlayer(game);
-
-        return new GameState(
-                GameState.BoardDTO.fromBoard(board),
-                currentPlayer,
-                status,
-                legalMoves
-        );
+        Game game = getOrCreateGame(gameId);
+        return buildGameState(game);
     }
 
     /**
-     * Make a move.
+     * Apply the requested move and return the resulting game state.
+     * Throws {@link IllegalMoveException} if the move is not legal.
      */
     public GameState makeMove(String gameId, MoveRequest request) {
-        Game game = getGame(gameId);
-
+        Game game = getOrCreateGame(gameId);
         Position from = Position.fromAlgebraic(request.from());
-        Position to = Position.fromAlgebraic(request.to());
+        Position to   = Position.fromAlgebraic(request.to());
 
         if (!chessRules.isLegalMove(from, to, game.currentPlayer, game.board)) {
             throw new IllegalMoveException("Invalid move: " + request.from() + " -> " + request.to());
         }
 
-        boolean enPassant = isEnPassantCapture(from, to, game.board);
-
-        // Execute the move
+        boolean wasEnPassant = chessRules.isEnPassantCapture(from, to, game.board);
         game.board.movePiece(from, to);
 
-        // En passant: remove the captured pawn (it is beside 'from', not at 'to')
-        if (enPassant) {
-            int direction = game.currentPlayer == Player.WHITE ? 1 : -1;
-            game.board.removePiece(new Position(to.row() - direction, to.col()));
+        if (wasEnPassant) {
+            removeEnPassantCapturedPawn(to, game.currentPlayer, game.board);
         }
 
-        // Update en passant target for the next move
-        Optional<Piece> movedPiece = game.board.getPiece(to);
-        if (movedPiece.isPresent() && movedPiece.get().type() == PieceType.PAWN
-                && Math.abs(to.row() - from.row()) == 2) {
-            game.board.setEnPassantTarget(new Position((from.row() + to.row()) / 2, from.col()));
-        } else {
-            game.board.setEnPassantTarget(null);
-        }
-
-        // Handle pawn promotion
+        updateEnPassantTarget(from, to, game.board);
         handlePromotion(to, game.board, request.promotion());
-
-        // Switch player
         game.currentPlayer = game.currentPlayer.opponent();
 
-        return getGameState(gameId);
+        return buildGameState(game);
     }
 
     /**
-     * Reset the game.
+     * Reset the game to the initial position with white to move.
      */
     public GameState resetGame(String gameId) {
-        Game game = getGame(gameId);
+        Game game = getOrCreateGame(gameId);
         game.board = createInitialBoard();
         game.currentPlayer = Player.WHITE;
-
-        return getGameState(gameId);
+        return buildGameState(game);
     }
 
-    private boolean isEnPassantCapture(Position from, Position to, Board board) {
-        Position epTarget = board.getEnPassantTarget();
-        if (epTarget == null || !to.equals(epTarget)) return false;
-        Piece piece = board.getPiece(from).orElse(null);
-        return piece != null && piece.type() == PieceType.PAWN;
-    }
+    // ── Package-private test hook ─────────────────────────────────────────────
 
-    private void handlePromotion(Position pawnPosition, Board board, String requestedPromotion) {
-        var piece = board.getPiece(pawnPosition);
-        if (piece.isPresent() && piece.get().type() == PieceType.PAWN) {
-            int row = pawnPosition.row();
-            if (row == 0 || row == board.rows() - 1) {
-                Player color = piece.get().color();
-                Piece promoted = switch (requestedPromotion != null ? requestedPromotion.toUpperCase() : "QUEEN") {
-                    case "ROOK"   -> new Rook(color);
-                    case "BISHOP" -> new Bishop(color);
-                    case "KNIGHT" -> new Knight(color);
-                    default       -> new Queen(color);
-                };
-                board.setPiece(pawnPosition, promoted);
-            }
-        }
-    }
-
-    // Package-private for testing — allows setting up custom positions
+    /**
+     * Directly set a custom position for testing purposes.
+     * Not part of the public API.
+     */
     void setupPositionForTesting(String gameId, Board board, Player currentPlayer) {
-        Game game = getGame(gameId);
+        Game game = getOrCreateGame(gameId);
         game.board = board;
         game.currentPlayer = currentPlayer;
     }
 
-    private GameState.GameStatus determineGameStatus(Player currentPlayer, Board board) {
-        if (chessRules.isCheckmate(currentPlayer, board)) {
-            return GameState.GameStatus.CHECKMATE;
-        }
-        if (chessRules.isStalemate(currentPlayer, board)) {
-            return GameState.GameStatus.STALEMATE;
-        }
-        if (chessRules.isInCheck(currentPlayer, board)) {
-            return GameState.GameStatus.CHECK;
-        }
+    // ── Private helpers ───────────────────────────────────────────────────────
+
+    private Game getOrCreateGame(String gameId) {
+        return games.computeIfAbsent(gameId, id -> new Game(createInitialBoard()));
+    }
+
+    private GameState buildGameState(Game game) {
+        GameState.GameStatus status = determineStatus(game.currentPlayer, game.board);
+        List<String> legalMoves = legalMovesForCurrentPlayer(game);
+        return new GameState(
+                GameState.BoardDTO.fromBoard(game.board),
+                game.currentPlayer,
+                status,
+                legalMoves
+        );
+    }
+
+    private GameState.GameStatus determineStatus(Player currentPlayer, Board board) {
+        if (chessRules.isCheckmate(currentPlayer, board)) return GameState.GameStatus.CHECKMATE;
+        if (chessRules.isStalemate(currentPlayer, board)) return GameState.GameStatus.STALEMATE;
+        if (chessRules.isInCheck(currentPlayer, board))   return GameState.GameStatus.CHECK;
         return GameState.GameStatus.IN_PROGRESS;
     }
 
-    private List<String> getLegalMovesForCurrentPlayer(Game game) {
-        List<String> moves = new ArrayList<>();
-        Player player = game.currentPlayer;
-        Board board = game.board;
+    private List<String> legalMovesForCurrentPlayer(Game game) {
+        return game.board.getPiecesOf(game.currentPlayer).entrySet().stream()
+                .flatMap(e -> legalMovesFrom(e.getKey(), e.getValue(), game))
+                .collect(Collectors.toList());
+    }
 
-        for (Map.Entry<Position, Piece> entry : board.getPiecesOf(player).entrySet()) {
-            Position from = entry.getKey();
-            Piece piece = entry.getValue();
+    private Stream<String> legalMovesFrom(Position from, Piece piece, Game game) {
+        return piece.getLegalMoves(from, game.board).stream()
+                .filter(to -> chessRules.isLegalMove(from, to, game.currentPlayer, game.board))
+                .map(to -> from.toAlgebraic() + "-" + to.toAlgebraic());
+    }
 
-            List<Position> legalTargets = piece.getLegalMoves(from, board).stream()
-                    .filter(to -> chessRules.isLegalMove(from, to, player, board))
-                    .toList();
+    private void removeEnPassantCapturedPawn(Position landingSquare, Player capturingPlayer, Board board) {
+        int pawnAdvanceDirection = capturingPlayer == Player.WHITE ? 1 : -1;
+        board.removePiece(new Position(landingSquare.row() - pawnAdvanceDirection, landingSquare.col()));
+    }
 
-            for (Position to : legalTargets) {
-                moves.add(from.toAlgebraic() + "-" + to.toAlgebraic());
-            }
+    private void updateEnPassantTarget(Position from, Position to, Board board) {
+        boolean wasPawnDoublePush = board.getPiece(to)
+                .map(p -> p.type() == PieceType.PAWN)
+                .orElse(false)
+                && Math.abs(to.row() - from.row()) == 2;
+
+        if (wasPawnDoublePush) {
+            board.setEnPassantTarget(new Position((from.row() + to.row()) / 2, from.col()));
+        } else {
+            board.setEnPassantTarget(null);
         }
+    }
 
-        return moves;
+    private void handlePromotion(Position square, Board board, String requestedPiece) {
+        var pawn = board.getPiece(square);
+        if (pawn.isEmpty() || pawn.get().type() != PieceType.PAWN) return;
+
+        boolean hasReachedLastRank = square.row() == 0 || square.row() == board.rows() - 1;
+        if (!hasReachedLastRank) return;
+
+        Player color = pawn.get().color();
+        Piece promoted = switch (requestedPiece != null ? requestedPiece.toUpperCase() : "QUEEN") {
+            case "ROOK"   -> new Rook(color);
+            case "BISHOP" -> new Bishop(color);
+            case "KNIGHT" -> new Knight(color);
+            default       -> new Queen(color);
+        };
+        board.setPiece(square, promoted);
     }
 
     private Board createInitialBoard() {
         Board board = new Board();
 
-        // Place white pieces
-        board.setPiece(new Position(0, 0), new Rook(Player.WHITE));
-        board.setPiece(new Position(0, 1), new Knight(Player.WHITE));
-        board.setPiece(new Position(0, 2), new Bishop(Player.WHITE));
-        board.setPiece(new Position(0, 3), new Queen(Player.WHITE));
-        board.setPiece(new Position(0, 4), new King(Player.WHITE));
-        board.setPiece(new Position(0, 5), new Bishop(Player.WHITE));
-        board.setPiece(new Position(0, 6), new Knight(Player.WHITE));
-        board.setPiece(new Position(0, 7), new Rook(Player.WHITE));
-
-        // Place white pawns
-        for (int col = 0; col < 8; col++) {
-            board.setPiece(new Position(1, col), new Pawn(Player.WHITE));
-        }
-
-        // Place black pieces
-        board.setPiece(new Position(7, 0), new Rook(Player.BLACK));
-        board.setPiece(new Position(7, 1), new Knight(Player.BLACK));
-        board.setPiece(new Position(7, 2), new Bishop(Player.BLACK));
-        board.setPiece(new Position(7, 3), new Queen(Player.BLACK));
-        board.setPiece(new Position(7, 4), new King(Player.BLACK));
-        board.setPiece(new Position(7, 5), new Bishop(Player.BLACK));
-        board.setPiece(new Position(7, 6), new Knight(Player.BLACK));
-        board.setPiece(new Position(7, 7), new Rook(Player.BLACK));
-
-        // Place black pawns
-        for (int col = 0; col < 8; col++) {
-            board.setPiece(new Position(6, col), new Pawn(Player.BLACK));
-        }
+        placeBackRow(board, 0, Player.WHITE);
+        placePawns(board, 1, Player.WHITE);
+        placePawns(board, 6, Player.BLACK);
+        placeBackRow(board, 7, Player.BLACK);
 
         return board;
     }
 
-    /**
-     * Internal game state.
-     */
-    private static class Game {
-        Board board;
-        Player currentPlayer;
+    private void placeBackRow(Board board, int row, Player player) {
+        board.setPiece(new Position(row, 0), new Rook(player));
+        board.setPiece(new Position(row, 1), new Knight(player));
+        board.setPiece(new Position(row, 2), new Bishop(player));
+        board.setPiece(new Position(row, 3), new Queen(player));
+        board.setPiece(new Position(row, 4), new King(player));
+        board.setPiece(new Position(row, 5), new Bishop(player));
+        board.setPiece(new Position(row, 6), new Knight(player));
+        board.setPiece(new Position(row, 7), new Rook(player));
+    }
 
-        Game() {
-            this.board = new Board();
-            this.currentPlayer = Player.WHITE;
+    private void placePawns(Board board, int row, Player player) {
+        for (int col = 0; col < board.cols(); col++) {
+            board.setPiece(new Position(row, col), new Pawn(player));
         }
     }
 
-    /**
-     * Exception for invalid moves.
-     */
+    // ── Inner types ───────────────────────────────────────────────────────────
+
+    private static class Game {
+        Board board;
+        Player currentPlayer = Player.WHITE;
+
+        Game(Board board) {
+            this.board = board;
+        }
+    }
+
     public static class IllegalMoveException extends RuntimeException {
         public IllegalMoveException(String message) {
             super(message);

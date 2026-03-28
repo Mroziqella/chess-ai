@@ -3,6 +3,7 @@ package chess.domain.model;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
  * Represents a chess board with configurable dimensions.
@@ -22,17 +23,17 @@ public class Board {
         this.rows = rows;
         this.cols = cols;
         this.squares = new HashMap<>();
-        initializeEmptyBoard();
+        initializeEmptySquares();
     }
 
     /**
-     * Create a standard 8x8 chess board.
+     * Create a standard 8×8 chess board.
      */
     public Board() {
         this(8, 8);
     }
 
-    private void initializeEmptyBoard() {
+    private void initializeEmptySquares() {
         for (int row = 0; row < rows; row++) {
             for (int col = 0; col < cols; col++) {
                 Position pos = new Position(row, col);
@@ -41,27 +42,8 @@ public class Board {
         }
     }
 
-    public int rows() {
-        return rows;
-    }
-
-    public int cols() {
-        return cols;
-    }
-
-    /**
-     * Get a square at the given position.
-     */
-    public Optional<Square> getSquare(Position position) {
-        return Optional.ofNullable(squares.get(position));
-    }
-
-    /**
-     * Get a square at the given row and column.
-     */
-    public Optional<Square> getSquare(int row, int col) {
-        return getSquare(new Position(row, col));
-    }
+    public int rows() { return rows; }
+    public int cols() { return cols; }
 
     /**
      * Get the piece at the given position.
@@ -71,7 +53,7 @@ public class Board {
     }
 
     /**
-     * Set a piece at the given position.
+     * Place a piece on the given square.
      */
     public void setPiece(Position position, Piece piece) {
         Square square = squares.get(position);
@@ -81,7 +63,7 @@ public class Board {
     }
 
     /**
-     * Remove a piece from the given position.
+     * Remove the piece from the given square.
      */
     public void removePiece(Position position) {
         Square square = squares.get(position);
@@ -91,14 +73,13 @@ public class Board {
     }
 
     /**
-     * Move a piece from one position to another.
+     * Move the piece from one square to another.
      */
     public void movePiece(Position from, Position to) {
-        Optional<Piece> piece = getPiece(from);
-        if (piece.isPresent()) {
+        getPiece(from).ifPresent(piece -> {
             removePiece(from);
-            setPiece(to, piece.get());
-        }
+            setPiece(to, piece);
+        });
     }
 
     /**
@@ -109,38 +90,52 @@ public class Board {
     }
 
     /**
-     * Check if a position is empty.
+     * Check if a square contains no piece.
      */
     public boolean isEmpty(Position position) {
         return getSquare(position).map(Square::isEmpty).orElse(false);
     }
 
     /**
-     * Check if a position contains a piece of the given player.
+     * Check if a square contains a piece belonging to the given player.
      */
     public boolean hasPieceOf(Position position, Player player) {
         return getSquare(position).map(square -> square.hasPieceOf(player)).orElse(false);
     }
 
     /**
-     * Check if a position contains an enemy piece of the given player.
+     * Check if a square contains a piece belonging to the given player's opponent.
      */
     public boolean hasEnemyPieceOf(Position position, Player player) {
         return getSquare(position).map(square -> square.hasEnemyPieceOf(player)).orElse(false);
     }
 
     /**
-     * Get all pieces of a given player.
+     * Get all pieces belonging to the given player, keyed by their positions.
      */
     public Map<Position, Piece> getPiecesOf(Player player) {
-        Map<Position, Piece> result = new HashMap<>();
-        for (Map.Entry<Position, Square> entry : squares.entrySet()) {
-            Piece piece = entry.getValue().piece();
-            if (piece != null && piece.color() == player) {
-                result.put(entry.getKey(), piece);
-            }
-        }
-        return result;
+        return squares.entrySet().stream()
+                .filter(e -> e.getValue().hasPieceOf(player))
+                .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().piece()));
+    }
+
+    /**
+     * Get all pieces on the board from both players, keyed by their positions.
+     */
+    public Map<Position, Piece> allPieces() {
+        return squares.entrySet().stream()
+                .filter(e -> !e.getValue().isEmpty())
+                .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().piece()));
+    }
+
+    /**
+     * Find the king's position for the given player.
+     */
+    public Optional<Position> getKingPosition(Player player) {
+        return squares.entrySet().stream()
+                .filter(e -> e.getValue().hasPieceOf(player) && e.getValue().piece().type() == PieceType.KING)
+                .map(Map.Entry::getKey)
+                .findFirst();
     }
 
     public Position getEnPassantTarget() {
@@ -151,19 +146,6 @@ public class Board {
         this.enPassantTarget = enPassantTarget;
     }
 
-    /**
-     * Get the king position for a player.
-     */
-    public Optional<Position> getKingPosition(Player player) {
-        for (Map.Entry<Position, Square> entry : squares.entrySet()) {
-            Piece piece = entry.getValue().piece();
-            if (piece != null && piece.color() == player && piece.type() == PieceType.KING) {
-                return Optional.of(entry.getKey());
-            }
-        }
-        return Optional.empty();
-    }
-
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
@@ -171,11 +153,14 @@ public class Board {
         for (int row = rows - 1; row >= 0; row--) {
             sb.append(row + 1).append(" ");
             for (int col = 0; col < cols; col++) {
-                Square square = squares.get(new Position(row, col));
-                sb.append(square).append(" ");
+                sb.append(squares.get(new Position(row, col))).append(" ");
             }
             sb.append("\n");
         }
         return sb.toString();
+    }
+
+    private Optional<Square> getSquare(Position position) {
+        return Optional.ofNullable(squares.get(position));
     }
 }
