@@ -10,17 +10,50 @@
     <div class="container">
         <h1>Szachy</h1>
 
-        <div id="statusBar" class="status-bar">
-            <div id="playerDot" class="player-dot white"></div>
-            <span id="status">Ruch: Białe</span>
+        <div id="lobby" class="lobby hidden">
+            <div id="lobbyIdle" class="lobby-card">
+                <p>Znajdź przeciwnika i zagraj!</p>
+                <button onclick="findGame()">Szukaj gry</button>
+            </div>
+            <div id="lobbyWaiting" class="lobby-card hidden">
+                <div class="spinner"></div>
+                <p>Szukam przeciwnika...</p>
+                <button onclick="cancelSearch()">Anuluj</button>
+            </div>
+            <form action="/api/logout" method="POST">
+                <button type="submit">Wyloguj</button>
+            </form>
         </div>
 
-        <div class="board-wrapper">
-            <div id="board" class="board"></div>
-        </div>
+        <div id="gameView" class="game-view hidden">
+            <div id="playerInfo" class="player-info hidden">
+                <span>Przeciwnik: <strong id="opponentName"></strong></span>
+                <span class="separator">|</span>
+                <span>Grasz: <strong id="playerColorText"></strong></span>
+            </div>
 
-        <div class="controls">
-            <button onclick="resetGame()">Nowa gra</button>
+            <div id="statusBar" class="status-bar">
+                <div id="playerDot" class="player-dot white"></div>
+                <span id="status">Ruch: Białe</span>
+            </div>
+
+            <div class="board-wrapper">
+                <div id="board" class="board"></div>
+            </div>
+
+            <div id="directControls" class="controls hidden">
+                <button id="resetBtn" onclick="resetGame()">Nowa gra</button>
+                <form action="/api/logout" method="POST" style="display:inline">
+                    <button type="submit">Wyloguj</button>
+                </form>
+            </div>
+
+            <div id="matchControls" class="controls hidden">
+                <button id="newGameBtn" class="hidden" onclick="leaveAndFindNew()">Szukaj nowej gry</button>
+                <form action="/api/logout" method="POST" style="display:inline">
+                    <button type="submit">Wyloguj</button>
+                </form>
+            </div>
         </div>
     </div>
 

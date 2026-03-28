@@ -4,6 +4,9 @@
     padding: 0;
 }
 
+/* ── Utility ── */
+.hidden { display: none !important; }
+
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
@@ -27,6 +30,75 @@ h1 {
     font-weight: 300;
     letter-spacing: 6px;
     text-transform: uppercase;
+    color: #e0c9a6;
+}
+
+/* ── Lobby ── */
+.lobby {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+}
+
+.lobby-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    padding: 40px 50px;
+    backdrop-filter: blur(10px);
+}
+
+.lobby-card p {
+    color: #e8e0d0;
+    font-size: 1rem;
+    letter-spacing: 0.5px;
+}
+
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid rgba(224, 201, 166, 0.2);
+    border-top-color: #e0c9a6;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ── Game view ── */
+.game-view {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+}
+
+/* ── Player info ── */
+.player-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 30px;
+    padding: 8px 20px;
+    backdrop-filter: blur(10px);
+    font-size: 0.9rem;
+    color: #e8e0d0;
+}
+
+.player-info .separator {
+    color: rgba(255, 255, 255, 0.2);
+}
+
+.player-info strong {
     color: #e0c9a6;
 }
 

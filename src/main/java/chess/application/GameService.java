@@ -40,8 +40,12 @@ public class GameService {
      * Return the current state of the game, creating it if it does not yet exist.
      */
     public GameState getGameState(String gameId) {
+        return getGameState(gameId, null);
+    }
+
+    public GameState getGameState(String gameId, String username) {
         Game game = getOrCreateGame(gameId);
-        return buildGameState(game);
+        return buildGameState(game, resolvePlayerColor(game, username));
     }
 
     /**
@@ -49,7 +53,23 @@ public class GameService {
      * Throws {@link IllegalMoveException} if the move is not legal.
      */
     public GameState makeMove(String gameId, MoveRequest request) {
+        return makeMove(gameId, request, null);
+    }
+
+    public GameState makeMove(String gameId, MoveRequest request, String username) {
         Game game = getOrCreateGame(gameId);
+
+        // For matched games, validate player identity
+        if (game.whitePlayer != null && username != null) {
+            if (!username.equals(game.whitePlayer) && !username.equals(game.blackPlayer)) {
+                throw new IllegalMoveException("You are not a player in this game");
+            }
+            Player playerColor = resolvePlayerColor(game, username);
+            if (playerColor != game.currentPlayer) {
+                throw new IllegalMoveException("It's not your turn");
+            }
+        }
+
         Position from = Position.fromAlgebraic(request.from());
         Position to   = Position.fromAlgebraic(request.to());
 
@@ -68,7 +88,7 @@ public class GameService {
         handlePromotion(to, game.board, request.promotion());
         game.currentPlayer = game.currentPlayer.opponent();
 
-        return buildGameState(game);
+        return buildGameState(game, resolvePlayerColor(game, username));
     }
 
     /**
@@ -78,7 +98,17 @@ public class GameService {
         Game game = getOrCreateGame(gameId);
         game.board = createInitialBoard();
         game.currentPlayer = Player.WHITE;
-        return buildGameState(game);
+        return buildGameState(game, null);
+    }
+
+    /**
+     * Create a game with assigned players (used by matchmaking).
+     */
+    public void createMatchedGame(String gameId, String whitePlayer, String blackPlayer) {
+        Game game = new Game(createInitialBoard());
+        game.whitePlayer = whitePlayer;
+        game.blackPlayer = blackPlayer;
+        games.put(gameId, game);
     }
 
     // ── Package-private test hook ─────────────────────────────────────────────
@@ -99,15 +129,25 @@ public class GameService {
         return games.computeIfAbsent(gameId, id -> new Game(createInitialBoard()));
     }
 
-    private GameState buildGameState(Game game) {
+    private GameState buildGameState(Game game, Player playerColor) {
         GameState.GameStatus status = determineStatus(game.currentPlayer, game.board);
         List<String> legalMoves = legalMovesForCurrentPlayer(game);
         return new GameState(
                 GameState.BoardDTO.fromBoard(game.board),
                 game.currentPlayer,
                 status,
-                legalMoves
+                legalMoves,
+                game.whitePlayer,
+                game.blackPlayer,
+                playerColor
         );
+    }
+
+    private Player resolvePlayerColor(Game game, String username) {
+        if (username == null || game.whitePlayer == null) return null;
+        if (username.equals(game.whitePlayer)) return Player.WHITE;
+        if (username.equals(game.blackPlayer)) return Player.BLACK;
+        return null;
     }
 
     private GameState.GameStatus determineStatus(Player currentPlayer, Board board) {
@@ -197,6 +237,8 @@ public class GameService {
     private static class Game {
         Board board;
         Player currentPlayer = Player.WHITE;
+        String whitePlayer;
+        String blackPlayer;
 
         Game(Board board) {
             this.board = board;

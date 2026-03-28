@@ -16,7 +16,10 @@ public record GameState(
         BoardDTO board,
         Player currentPlayer,
         GameStatus status,
-        List<String> legalMoves
+        List<String> legalMoves,
+        String whitePlayer,
+        String blackPlayer,
+        Player playerColor
 ) {
     /**
      * 2-D snapshot of the board as Unicode piece symbols, indexed

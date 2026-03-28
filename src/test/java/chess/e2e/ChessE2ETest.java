@@ -52,11 +52,22 @@ class ChessE2ETest {
         return "http://localhost:" + port;
     }
 
+    private void loginViaBrowser() {
+        driver.get(baseUrl() + "/login.html");
+        WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+        wait.until(ExpectedConditions.presenceOfElementLocated(By.id("username")));
+        driver.findElement(By.id("username")).sendKeys("Kamil");
+        driver.findElement(By.id("password")).sendKeys("Kamil");
+        driver.findElement(By.cssSelector("button[type='submit']")).click();
+        wait.until(ExpectedConditions.presenceOfElementLocated(By.className("board")));
+    }
+
     // ── API sanity checks ────────────────────────────────────────────────────
 
     @Test
     void api_getGame_returns200() {
-        ResponseEntity<String> response = restTemplate.getForEntity("/api/game", String.class);
+        ResponseEntity<String> response = restTemplate.withBasicAuth("Kamil", "Kamil")
+                .getForEntity("/api/game", String.class);
         System.out.println("GET /api/game status: " + response.getStatusCode());
         System.out.println("GET /api/game body:   " + response.getBody());
         assertEquals(200, response.getStatusCode().value(),
@@ -65,7 +76,8 @@ class ChessE2ETest {
 
     @Test
     void api_resetGame_returns200() {
-        ResponseEntity<String> response = restTemplate.postForEntity("/api/game/reset", null, String.class);
+        ResponseEntity<String> response = restTemplate.withBasicAuth("Kamil", "Kamil")
+                .postForEntity("/api/game/reset", null, String.class);
         assertEquals(200, response.getStatusCode().value(),
                 "POST /api/game/reset should return 200. Body: " + response.getBody());
     }
@@ -74,7 +86,8 @@ class ChessE2ETest {
 
     @Test
     void browser_boardLoadsWith64Squares() {
-        driver.get(baseUrl());
+        loginViaBrowser();
+        driver.get(baseUrl() + "?gameId=e2e-board");
         WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
         wait.until(ExpectedConditions.presenceOfElementLocated(By.className("square")));
 
@@ -84,7 +97,8 @@ class ChessE2ETest {
 
     @Test
     void browser_boardShowsPieces() {
-        driver.get(baseUrl());
+        loginViaBrowser();
+        driver.get(baseUrl() + "?gameId=e2e-pieces");
         WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
         wait.until(ExpectedConditions.presenceOfElementLocated(By.className("square")));
 
@@ -101,7 +115,8 @@ class ChessE2ETest {
 
     @Test
     void browser_clickPieceHighlightsIt() {
-        driver.get(baseUrl());
+        loginViaBrowser();
+        driver.get(baseUrl() + "?gameId=e2e-highlight");
         WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
         wait.until(ExpectedConditions.presenceOfElementLocated(By.className("square")));
 
@@ -122,6 +137,7 @@ class ChessE2ETest {
 
     @Test
     void browser_clickPieceThenMoveExecutesMove() {
+        loginViaBrowser();
         driver.get(baseUrl() + "?gameId=e2e-move");
         WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
         wait.until(ExpectedConditions.presenceOfElementLocated(By.className("square")));
@@ -155,6 +171,7 @@ class ChessE2ETest {
 
     @Test
     void browser_clickResetButtonResetsGame() {
+        loginViaBrowser();
         driver.get(baseUrl() + "?gameId=e2e-reset");
         WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
         wait.until(ExpectedConditions.presenceOfElementLocated(By.className("square")));
@@ -168,7 +185,7 @@ class ChessE2ETest {
         wait.until(ExpectedConditions.textToBePresentInElementLocated(By.id("status"), "Czarne"));
 
         // Click "Nowa gra" reset button
-        WebElement resetButton = driver.findElement(By.tagName("button"));
+        WebElement resetButton = driver.findElement(By.id("resetBtn"));
         resetButton.click();
 
         // Wait for White's turn again
@@ -182,6 +199,7 @@ class ChessE2ETest {
 
     @Test
     void browser_clickEmptySquareDoesNothing() {
+        loginViaBrowser();
         driver.get(baseUrl() + "?gameId=e2e-empty");
         WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
         wait.until(ExpectedConditions.presenceOfElementLocated(By.className("square")));
@@ -197,6 +215,7 @@ class ChessE2ETest {
 
     @Test
     void browser_clickOpponentPieceDoesNothing() {
+        loginViaBrowser();
         driver.get(baseUrl() + "?gameId=e2e-opponent");
         WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
         wait.until(ExpectedConditions.presenceOfElementLocated(By.className("square")));
@@ -212,6 +231,7 @@ class ChessE2ETest {
 
     @Test
     void browser_twoMovesSequence() {
+        loginViaBrowser();
         driver.get(baseUrl() + "?gameId=e2e-seq");
         WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
         wait.until(ExpectedConditions.presenceOfElementLocated(By.className("square")));

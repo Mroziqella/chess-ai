@@ -7,6 +7,7 @@ import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.security.Principal;
 import java.util.Map;
 
 /**
@@ -27,8 +28,9 @@ public class GameController {
      */
     @GetMapping
     public ResponseEntity<GameState> getGame(
-            @RequestParam(defaultValue = "default") String gameId) {
-        return ResponseEntity.ok(gameService.getGameState(gameId));
+            @RequestParam(defaultValue = "default") String gameId,
+            Principal principal) {
+        return ResponseEntity.ok(gameService.getGameState(gameId, principal.getName()));
     }
 
     /**
@@ -37,8 +39,9 @@ public class GameController {
     @PostMapping("/move")
     public ResponseEntity<GameState> makeMove(
             @RequestParam(defaultValue = "default") String gameId,
-            @Valid @RequestBody MoveRequest request) {
-        return ResponseEntity.ok(gameService.makeMove(gameId, request));
+            @Valid @RequestBody MoveRequest request,
+            Principal principal) {
+        return ResponseEntity.ok(gameService.makeMove(gameId, request, principal.getName()));
     }
 
     /**

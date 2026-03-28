@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Szachy — Logowanie</title>
+    <link rel="stylesheet" href="login.css">
+</head>
+<body>
+    <div class="login-container">
+        <h1>Szachy</h1>
+        <p class="subtitle">Zaloguj się, aby zagrać</p>
+
+        <div id="errorMsg" class="error-msg" style="display:none">
+            Nieprawidłowa nazwa użytkownika lub hasło
+        </div>
+        <div id="logoutMsg" class="logout-msg" style="display:none">
+            Zostałeś wylogowany
+        </div>
+
+        <form action="/api/login" method="POST" class="login-form">
+            <div class="field">
+                <label for="username">Użytkownik</label>
+                <input type="text" id="username" name="username" autocomplete="username" required autofocus>
+            </div>
+            <div class="field">
+                <label for="password">Hasło</label>
+                <input type="password" id="password" name="password" autocomplete="current-password" required>
+            </div>
+            <button type="submit">Zaloguj</button>
+        </form>
+    </div>
+
+    <script>
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('error') === 'true') {
+            document.getElementById('errorMsg').style.display = 'block';
+        }
+        if (params.get('logout') === 'true') {
+            document.getElementById('logoutMsg').style.display = 'block';
+        }
+    </script>
+</body>
+</html>
